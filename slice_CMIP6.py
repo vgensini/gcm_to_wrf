@@ -8,8 +8,8 @@ center = 'GFDL'
 scenario = 'historical_r1i1p1f1'
 resolution = '_gr2'
 data_dir = f'/home/data/GCM_data/{center}/{model}/{scenario}'
-lev = '3h'
-var = 'tslsi'
+lev = '6h'
+var = 'ps'
 
 years = np.arange(1990,2015,1)
 

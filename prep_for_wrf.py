@@ -191,7 +191,37 @@ def create_U_V_on_P(year):
             newUonPlevs[tpts,i,lonpts,latpts] = newUonPlevs[tpts,i+1,lonpts,latpts]
         else:
             pass
-    return newUonPlevs, newVonPlevs
+    return newUonPlevs, newVonPlevs, times, lat, lon
+
+def create_surface_vars(year, orog):
+    ps_file = f'{data_dir}/ps_6hrLev_{center}-{model}_{scenario}_{resolution}_{year}010100-{year}123123.nc'
+    tmp2_file = f'{data_dir}/tas_6hrLev_{center}-{model}_{scenario}_{resolution}_{year}010100-{year}123123.nc'
+    qs_file = f'{data_dir}/huss_6hr_{center}-{model}_{scenario}_{resolution}_{year}010100-{year}123123.nc'
+    ua_file = f'{data_dir}/uas_6hr_{center}-{model}_{scenario}_{resolution}_{year}010100-{year}123123.nc'
+    va_file = f'{data_dir}/vas_6hr_{center}-{model}_{scenario}_{resolution}_{year}010100-{year}123123.nc'
+    nc = Dataset(ps_file,'r')
+    nc1 = Dataset(tmp2_file,'r')
+    nc2 = Dataset(qs_file,'r')
+    nc3 = Dataset(ua_file,'r')
+    nc4 = Dataset(va_file,'r')
+    #read in variables
+    ps = nc.variables['ps'][:]
+    t2m = nc1.variables['tas'][:]
+    q2m = nc2.variables['huss'][:]
+    u10 = nc3.variables['uas'][:]
+    v10 = nc4.variables['vas'][:]
+    nc.close()
+    nc1.close()
+    nc2.close()
+    nc3.close()
+    nc4.close()
+    ps = np.ma.array(ps,mask=False) / 100. 
+    t2m = np.ma.array(t2m,mask=False)
+    q2m = np.ma.array(q2m,mask=False)
+    u10 = np.ma.array(u10,mask=False)
+    v10 = np.ma.array(v10,mask=False)
+    pmsl = (ps * ( 1 - (0.0065*orog/(t2m+0.0065*orog)))**-5.257) * 100. 
+    return t2m, q2m, u10, v10, pmsl
 
 def create_non_atmos(year):
     tos_file = f'{data_dir}/tos_6hr_{center}-{model}_{scenario}_{resolution}_{year}010100-{year}123123.nc'
@@ -206,8 +236,6 @@ def create_non_atmos(year):
     land_frac = ncland.variables['sftlf'][:]
     ncland.close()
     landseamask = np.array(np.greater_equal(land_frac,0.5),dtype=int)
-    init_time = datetime.datetime.strptime(f'{year}010100',"%Y%m%d%H")
-    end_time = datetime.datetime.strptime(f'{year}123123',"%Y%m%d%H")
     nc = Dataset(tos_file,'r')
     sst = nc.variables['tos'][:]
     nc.close()
@@ -218,7 +246,7 @@ def create_non_atmos(year):
     skin_t = np.ma.array(skin_t,mask=False)
     return orog, landseamask, sst, skin_t
 
-def plevel_to_grib2(var, varname, times, lat, lon):
+def gcm_to_grib2(var, varname, times, lat, lon):
     numlat = len(lat)
     numlon = len(lon)
     for tindex,dat in enumerate(times):
@@ -235,9 +263,9 @@ def plevel_to_grib2(var, varname, times, lat, lon):
         grbfile = grib_dir + f'/{mip_era}_{center}-{model}_{scenario}_{year}{month}{day}{hour}00.grb2'
 
         if os.path.isfile(grbfile) == False:
-            f=open(grbfile,'wb')
-        elif os.path.isfile(grbfile)==True:
-            f=open(grbfile,'a+')
+        	f=open(grbfile,'wb')
+        else:
+        	f=open(grbfile,'a+')
 
         orig_id = 7 # 7=NWS NCEP
         sub_id = 4 # 4=EMC
@@ -282,7 +310,6 @@ def plevel_to_grib2(var, varname, times, lat, lon):
                 grib2.addfield(pdtnum,pdtmpl,drtnum,drtmpl,var[tindex,i,:,:])
                 grib2.end()
                 f.write(grib2.msg)
-
         elif varname == 'U':
             for i,p in enumerate(newPlevs):
                 pdtnum = 0 #Analysis or forecast at a horizontal level or in a horizontal layer at a point in time.
@@ -298,7 +325,6 @@ def plevel_to_grib2(var, varname, times, lat, lon):
                 grib2.addfield(pdtnum,pdtmpl,drtnum,drtmpl,var[tindex,i,:,:])
                 grib2.end()
                 f.write(grib2.msg)
-
         elif varname == 'V':
             for i,p in enumerate(newPlevs):
                 pdtnum = 0 #Analysis or forecast at a horizontal level or in a horizontal layer at a point in time.
@@ -314,7 +340,6 @@ def plevel_to_grib2(var, varname, times, lat, lon):
                 grib2.addfield(pdtnum,pdtmpl,drtnum,drtmpl,var[tindex,i,:,:])
                 grib2.end()
                 f.write(grib2.msg)
-
         elif varname == 'RH':
             for i,p in enumerate(newPlevs):
                 pdtnum = 0 #Analysis or forecast at a horizontal level or in a horizontal layer at a point in time.
@@ -331,7 +356,6 @@ def plevel_to_grib2(var, varname, times, lat, lon):
                 grib2.addfield(pdtnum,pdtmpl,drtnum,drtmpl,var[tindex,i,:,:])
                 grib2.end()
                 f.write(grib2.msg)
-
         elif varname == 'Q':
             for i,p in enumerate(newPlevs):
                 pdtnum = 0 #Analysis or forecast at a horizontal level or in a horizontal layer at a point in time.
@@ -347,7 +371,6 @@ def plevel_to_grib2(var, varname, times, lat, lon):
                 grib2.addfield(pdtnum,pdtmpl,drtnum,drtmpl,var[tindex,i,:,:])
                 grib2.end()
                 f.write(grib2.msg)
-
         elif varname == 'OROG':
             pdtnum = 0 #Analysis or forecast at a horizontal level or in a horizontal layer at a point in time.
             type_gen = 2 #
@@ -364,7 +387,6 @@ def plevel_to_grib2(var, varname, times, lat, lon):
             grib2.addfield(pdtnum,pdtmpl,drtnum,drtmpl,var)
             grib2.end()
             f.write(grib2.msg)
-
         elif varname == 'LANDSEA':
             pdtnum = 0 #Analysis or forecast at a horizontal level or in a horizontal layer at a point in time.
             type_gen = 2 #
@@ -381,7 +403,6 @@ def plevel_to_grib2(var, varname, times, lat, lon):
             grib2.addfield(pdtnum,pdtmpl,drtnum,drtmpl,var)
             grib2.end()
             f.write(grib2.msg)
-
         elif varname == 'SST':
             pdtnum = 0 #Analysis or forecast at a horizontal level or in a horizontal layer at a point in time.
             type_gen = 2 #
@@ -395,10 +416,9 @@ def plevel_to_grib2(var, varname, times, lat, lon):
             discipline = 10 #0:meteorological, 1:hydrological, 2:land surface, 3:space, 10:ocean
             grib2 = Grib2Encode(discipline,idsect)
             grib2.addgrid(gdsinfo,gdtmpl)
-            grib2.addfield(pdtnum,pdtmpl,drtnum,drtmpl,var[tindex,:])
+            grib2.addfield(pdtnum,pdtmpl,drtnum,drtmpl,var[tindex,:, :])
             grib2.end()
             f.write(grib2.msg)
-
         elif varname == 'TS':
             pdtnum = 0 #Analysis or forecast at a horizontal level or in a horizontal layer at a point in time.
             type_gen = 2 #
@@ -412,18 +432,90 @@ def plevel_to_grib2(var, varname, times, lat, lon):
             discipline = 10 #0:meteorological, 1:hydrological, 2:land surface, 3:space, 10:ocean
             grib2 = Grib2Encode(discipline,idsect)
             grib2.addgrid(gdsinfo,gdtmpl)
-            grib2.addfield(pdtnum,pdtmpl,drtnum,drtmpl,var[tindex,:])
+            grib2.addfield(pdtnum,pdtmpl,drtnum,drtmpl,var[tindex,:, :])
             grib2.end()
             f.write(grib2.msg)
-        
+        elif varname == 'T2':
+            pdtnum = 0 #Analysis or forecast at a horizontal level or in a horizontal layer at a point in time.
+            type_gen = 2 #
+            fixed_sfc = 103 # 103: specified height level above ground m
+            scale_factor = 0 #scale factor
+            height = 2 #2m
+            drtmpl = [1185291264, 0, 2, 14, 0, 0, 255]
+            parameter_cat = 0 # 0: temp, 1: moisture, 2: momentum, 3: mass
+            parameter_num = 0 # temp in K
+            pdtmpl = [parameter_cat, parameter_num, type_gen, 255, 255, 0, 0, 1, 0, fixed_sfc,scale_factor,height,255,0,0]        
+            grib2 = Grib2Encode(0,idsect)
+            grib2.addgrid(gdsinfo,gdtmpl)
+            grib2.addfield(pdtnum,pdtmpl,drtnum,drtmpl,var[tindex,:, :])
+            grib2.end()
+            f.write(grib2.msg)
+        elif varname == 'Q2':
+            pdtnum = 0 #Analysis or forecast at a horizontal level or in a horizontal layer at a point in time.
+            type_gen = 2 #
+            fixed_sfc = 103 # 103: specified height level above ground m
+            scale_factor = 0 #scale factor
+            height = 2 #2m
+            drtmpl = [1065353216, 0, 5, 12, 0, 0, 255]
+            parameter_cat = 1 # 0: temp, 1: moisture, 2: momentum, 3: mass
+            parameter_num = 0 # specific humidity in kg/kg
+            pdtmpl = [parameter_cat, parameter_num, type_gen, 255, 255, 0, 0, 1, 0, fixed_sfc,scale_factor,height,255,0,0]
+            grib2 = Grib2Encode(0,idsect)
+            grib2.addgrid(gdsinfo,gdtmpl)
+            grib2.addfield(pdtnum,pdtmpl,drtnum,drtmpl,var[tindex,:, :])
+            grib2.end()
+            f.write(grib2.msg)
+        elif varname == 'U10':
+            pdtnum = 0 #Analysis or forecast at a horizontal level or in a horizontal layer at a point in time.
+            type_gen = 2 #
+            fixed_sfc = 103 # 103: specified height level above ground m
+            scale_factor = 0 #scale factor
+            height = 10 #2m
+            drtmpl = [-986906624, 0, 2, 13, 0, 0, 255]
+            parameter_cat = 2 # 0: temp, 1: moisture, 2: momentum, 3: mass
+            parameter_num = 2 # 2: m/s
+            pdtmpl = [parameter_cat, parameter_num, type_gen, 255, 255, 0, 0, 1, 0, fixed_sfc,scale_factor,height,255,0,0]
+            grib2 = Grib2Encode(0,idsect)
+            grib2.addgrid(gdsinfo,gdtmpl)
+            grib2.addfield(pdtnum,pdtmpl,drtnum,drtmpl,var[tindex,:, :])
+            grib2.end()
+            f.write(grib2.msg)
+        elif varname == 'V10':
+            pdtnum = 0 #Analysis or forecast at a horizontal level or in a horizontal layer at a point in time.
+            type_gen = 2 #
+            fixed_sfc = 103 # 103: specified height level above ground m
+            scale_factor = 0 #scale factor
+            height = 10 #2m
+            drtmpl = [-986148864, 0, 2, 13, 0, 0, 255]
+            parameter_cat = 2 # 0: temp, 1: moisture, 2: momentum, 3: mass
+            parameter_num = 3 # 2: m/s
+            pdtmpl = [parameter_cat, parameter_num, type_gen, 255, 255, 0, 0, 1, 0, fixed_sfc,scale_factor,height,255,0,0]
+            grib2 = Grib2Encode(0,idsect)
+            grib2.addgrid(gdsinfo,gdtmpl)
+            grib2.addfield(pdtnum,pdtmpl,drtnum,drtmpl,var[tindex,:, :])
+            grib2.end()
+            f.write(grib2.msg)
+        elif varname == 'PSL':
+            pdtnum = 0 #Analysis or forecast at a horizontal level or in a horizontal layer at a point in time.
+            type_gen = 2 #
+            fixed_sfc = 101 # 103: specified height level above ground m
+            scale_factor = 0 #scale factor
+            height = 0
+            drtmpl = [1231667856, 1, 1, 16, 0, 0, 255]
+            parameter_cat = 3 # 0: temp, 1: moisture, 2: momentum, 3: mass
+            parameter_num = 1 #192 pressure reduced to MSL
+            pdtmpl = [parameter_cat, parameter_num, type_gen, 255, 255, 0, 0, 1, 0, fixed_sfc,scale_factor,height,255,0,0]
+            grib2 = Grib2Encode(0,idsect)
+            grib2.addgrid(gdsinfo,gdtmpl)
+            grib2.addfield(pdtnum,pdtmpl,drtnum,drtmpl,var[tindex,:, :])
+            grib2.end()
+            f.write(grib2.msg)
 
-        # Next
-        # Write the surface fields to grib2
-        # calculate and write out sea-level pressure
         # Figure out soil temperature and moisture
 
         f.close()
         print(f'{varname} GRIB2 Fields Written for {year}')
 
-
+newUonPlevs, newVonPlevs, times, lat, lon = create_U_V_on_P(2008)
+gcm_to_grib2(newUonPlevs, 'U', times, lat, lon)
 
