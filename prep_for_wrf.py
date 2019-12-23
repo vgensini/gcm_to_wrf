@@ -206,7 +206,31 @@ def create_U_V_on_P(year):
     newVonPlevs = np.ma.array(newVonPlevs,mask=False)
     return newUonPlevs, newVonPlevs, times, lat, lon
 
-def create_surface_vars(year, orog):
+def create_surface_vars(year):
+	tos_file = f'{data_dir}/tos_6hr_{center}-{model}_{scenario}_{resolution}_{year}010100-{year}123123.nc'
+    ts_file = f'{data_dir}/tslsi_6hr_{center}-{model}_{scenario}_{resolution}_{year}010100-{year}123123.nc'
+    orog_file = f'{data_dir}/orog_fx_{center}-{model}_{scenario}_{resolution}.nc'
+    land_frac_file = f'{data_dir}/sftlf_fx_{center}-{model}_{scenario}_{resolution}.nc'
+    nc_o = Dataset(orog_file,'r')
+    orog = nc_o.variables['orog'][:]
+    nc_o.close()
+    orog = np.ma.array(orog,mask=False)
+    ncland = Dataset(land_frac_file,'r')
+    land_frac = ncland.variables['sftlf'][:]
+    ncland.close()
+    landseamask = np.array(np.greater_equal(land_frac,0.5),dtype=int)
+    nc = Dataset(tos_file,'r')
+    sst = nc.variables['tos'][:]
+    nc.close()
+    nc = Dataset(ts_file,'r')
+    skin_t = nc.variables['tslsi'][:]
+    lat = nc.variables['lat'][:]
+    lon = nc.variables['lon'][:]
+    time = nc.variables['time']
+    times = num2date(time[:],units=time.units,calendar=time.calendar)
+    nc.close()
+    sst = np.ma.array(sst,mask=False)
+    skin_t = np.ma.array(skin_t,mask=False)
     ps_file = f'{data_dir}/ps_6hrLev_{center}-{model}_{scenario}_{resolution}_{year}010100-{year}123123.nc'
     tmp2_file = f'{data_dir}/tas_6hrLev_{center}-{model}_{scenario}_{resolution}_{year}010100-{year}123123.nc'
     qs_file = f'{data_dir}/huss_6hr_{center}-{model}_{scenario}_{resolution}_{year}010100-{year}123123.nc'
@@ -233,34 +257,25 @@ def create_surface_vars(year, orog):
     q2m = np.ma.array(q2m,mask=False)
     u10 = np.ma.array(u10,mask=False)
     v10 = np.ma.array(v10,mask=False)
-    pmsl = (ps * ( 1 - (0.0065*orog/(t2m+0.0065*orog)))**-5.257) * 100. 
-    return t2m, q2m, u10, v10, pmsl
+    pmsl = (ps * ( 1 - (0.0065*orog/(t2m+0.0065*orog)))**-5.257) * 100.
 
-def create_non_atmos(year):
-    tos_file = f'{data_dir}/tos_6hr_{center}-{model}_{scenario}_{resolution}_{year}010100-{year}123123.nc'
-    ts_file = f'{data_dir}/tslsi_6hr_{center}-{model}_{scenario}_{resolution}_{year}010100-{year}123123.nc'
-    orog_file = f'{data_dir}/orog_fx_{center}-{model}_{scenario}_{resolution}.nc'
-    land_frac_file = f'{data_dir}/sftlf_fx_{center}-{model}_{scenario}_{resolution}.nc'
-    nc_o = Dataset(orog_file,'r')
-    orog = nc_o.variables['orog'][:]
-    nc_o.close()
-    orog = np.ma.array(orog,mask=False)
-    ncland = Dataset(land_frac_file,'r')
-    land_frac = ncland.variables['sftlf'][:]
-    ncland.close()
-    landseamask = np.array(np.greater_equal(land_frac,0.5),dtype=int)
-    nc = Dataset(tos_file,'r')
-    sst = nc.variables['tos'][:]
-    nc.close()
-    nc = Dataset(ts_file,'r')
-    skin_t = nc.variables['tslsi'][:]
+    return t2m, q2m, u10, v10, pmsl, orog, landseamask, sst, skin_t, times, lat, lon
+
+def create_soil_vars(year, g2lat, g2lon):
+	from scipy import interpolate
+    tsl_file = f'{data_dir}/tsl_Lmon_{center}-{model}_{scenario}_{resolution}_{year}010100-{year}123123.nc'
+    mrsos_file = f'{data_dir}/mrsos_Lmon_{center}-{model}_{scenario}_{resolution}_{year}010100-{year}123123.nc'
+    nc = Dataset(tsl_file,'r')
+    numtime = len(nc.dimensions['time'])
+    numlat = len(nc.dimensions['lat'])
+    numlon = len(nc.dimensions['lon'])
+    depth = len(nc.dimensions['depth'])
+    ts = nc.variables['tsl'][:]
     lat = nc.variables['lat'][:]
     lon = nc.variables['lon'][:]
-    time = nc.variables['time']
-    times = num2date(time[:],units=time.units,calendar=time.calendar)
-    nc.close()
-    sst = np.ma.array(sst,mask=False)
-    skin_t = np.ma.array(skin_t,mask=False)
+    g2_grid = interpolate.interp2d(lon, lat, ts)
+    ts_g2_grid = g2_grid(g2lon, g2lat)
+
     return orog, landseamask, sst, skin_t, times, lat, lon
 
 def gcm_to_grib2(var, varname, times, lat, lon):
@@ -550,6 +565,12 @@ def gcm_to_grib2(var, varname, times, lat, lon):
 
         f.close()
         print(f'{varname} GRIB2 Fields Written for  {month} {day} {hour} {year}')
+
+
+
+
+
+
 
 newUonPlevs, newVonPlevs, times, lat, lon = create_U_V_on_P(2008)
 print('Finished U/V variable creation, starting the write to GRIB2.')
