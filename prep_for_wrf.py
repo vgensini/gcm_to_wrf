@@ -21,23 +21,25 @@ resolution = 'gr2'
 ####################################
 ####################################
 data_dir = f'/home/data/GCM_data/{center}/{model}/{scenario}'
-orog_file = f'{data_dir}/orog_fx_{center}-{model}_{scenario}_{resolution}.nc'
-nc_o = Nio.open_file(orog_file,'r')
-orog = nc_o.variables['orog'][:]
-nc_o.close()
-orog = np.ma.array(orog,mask=False)
+#orog_file = f'{data_dir}/orog_fx_{center}-{model}_{scenario}_{resolution}.nc'
+#nc_o = Nio.open_file(orog_file,'r')
+#orog = nc_o.variables['orog'][:]
+#nc_o.close()
+#orog = np.ma.array(orog,mask=False)
 #START CONSTANTS
 g = 9.80616 #m/s^2
 ginv = 1./g
 Rd = 286.9968933 #J/K/kg
 alpha = 0.0065*Rd*ginv
-phis = orog * g
+#phis = orog * g
 gamma = 6.5e-3
 rgamog = 287.04*gamma/9.81
 gammadry = 9.8/10000.
 gammamoi = 6.5/10000.
 newPlevs = np.arange(1000,24,-25)
 numnewPlevs = len(newPlevs)
+print(newPlevs)
+
 #END CONSTANTS
 
 def create_T_on_P(year):
@@ -147,6 +149,7 @@ def create_U_V_on_P(year):
     ua_file = f'{data_dir}/ua_6hrLev_{center}-{model}_{scenario}_{resolution}_{year}010100-{year}123123.nc'
     init_time = datetime.datetime.strptime(f'{year}010100',"%Y%m%d%H")
     end_time = datetime.datetime.strptime(f'{year}123123',"%Y%m%d%H")
+    print(f'Opening U/V files for {year}.')
     nc = Dataset(va_file,'r')
     nc1 = Dataset(ua_file,'r')
     #get dimension sizes
@@ -170,27 +173,37 @@ def create_U_V_on_P(year):
     nc.close()
     nc1.close()
     #make sure to re-order level dimension as function is expecting model levels from top to bottom
+    print(f'Starting U/V interpolation for {year}.')
     newVonPlevs = Ngl.vinth2p(va[:,::-1,:,:],a[::-1],b[::-1],newPlevs,ps,2,p0,1,False)
     newUonPlevs = Ngl.vinth2p(ua[:,::-1,:,:],a[::-1],b[::-1],newPlevs,ps,2,p0,1,False)
+    print(f'Finished U/V interpolation for {year}.')
     for i in np.arange(numnewPlevs-1,-1,-1):
-        maskedi = np.where(newVonPlevs[:,i,:,:] >= 1e+20)
+        maskedi = np.where(newVonPlevs[:,i,:,:] >= 1e+30)
         if len(maskedi) >0:
             tpts = maskedi[0]
             lonpts = maskedi[1]
             latpts = maskedi[2]
-            newVonPlevs[tpts,i,lonpts,latpts] = newVonPlevs[tpts,i+1,lonpts,latpts]
+            try:
+                newVonPlevs[tpts,i,lonpts,latpts] = newVonPlevs[tpts,i+1,lonpts,latpts]
+            except Exception as e:
+                newVonPlevs[tpts,i,lonpts,latpts] = newVonPlevs[tpts,i-1,lonpts,latpts]
         else:
             pass
 
     for i in np.arange(numnewPlevs-1,-1,-1):
-        maskedi = np.where(newUonPlevs[:,i,:,:] >= 1e+20)
+        maskedi = np.where(newUonPlevs[:,i,:,:] >= 1e+30)
         if len(maskedi) >0:
             tpts = maskedi[0]
             lonpts = maskedi[1]
             latpts = maskedi[2]
-            newUonPlevs[tpts,i,lonpts,latpts] = newUonPlevs[tpts,i+1,lonpts,latpts]
+            try:
+                newUonPlevs[tpts,i,lonpts,latpts] = newUonPlevs[tpts,i+1,lonpts,latpts]
+            except Exception as e:
+                newUonPlevs[tpts,i,lonpts,latpts] = newUonPlevs[tpts,i-1,lonpts,latpts]
         else:
             pass
+    newUonPlevs = np.ma.array(newUonPlevs,mask=False)
+    newVonPlevs = np.ma.array(newVonPlevs,mask=False)
     return newUonPlevs, newVonPlevs, times, lat, lon
 
 def create_surface_vars(year, orog):
@@ -226,13 +239,13 @@ def create_surface_vars(year, orog):
 def create_non_atmos(year):
     tos_file = f'{data_dir}/tos_6hr_{center}-{model}_{scenario}_{resolution}_{year}010100-{year}123123.nc'
     ts_file = f'{data_dir}/tslsi_6hr_{center}-{model}_{scenario}_{resolution}_{year}010100-{year}123123.nc'
-    orog_file = f'orog_fx_{center}-{model}_{scenario}_{resolution}.nc'
-    land_frac_file = f'sftlf_fx_{center}-{model}_{scenario}_{resolution}.nc'
-    nc_o = Nio.open_file(orog_file,'r')
+    orog_file = f'{data_dir}/orog_fx_{center}-{model}_{scenario}_{resolution}.nc'
+    land_frac_file = f'{data_dir}/sftlf_fx_{center}-{model}_{scenario}_{resolution}.nc'
+    nc_o = Dataset(orog_file,'r')
     orog = nc_o.variables['orog'][:]
     nc_o.close()
     orog = np.ma.array(orog,mask=False)
-    ncland = Nio.open_file(land_frac_file,'r')
+    ncland = Dataset(land_frac_file,'r')
     land_frac = ncland.variables['sftlf'][:]
     ncland.close()
     landseamask = np.array(np.greater_equal(land_frac,0.5),dtype=int)
@@ -241,10 +254,14 @@ def create_non_atmos(year):
     nc.close()
     nc = Dataset(ts_file,'r')
     skin_t = nc.variables['tslsi'][:]
+    lat = nc.variables['lat'][:]
+    lon = nc.variables['lon'][:]
+    time = nc.variables['time']
+    times = num2date(time[:],units=time.units,calendar=time.calendar)
     nc.close()
     sst = np.ma.array(sst,mask=False)
     skin_t = np.ma.array(skin_t,mask=False)
-    return orog, landseamask, sst, skin_t
+    return orog, landseamask, sst, skin_t, times, lat, lon
 
 def gcm_to_grib2(var, varname, times, lat, lon):
     numlat = len(lat)
@@ -261,11 +278,14 @@ def gcm_to_grib2(var, varname, times, lat, lon):
             pass
 
         grbfile = grib_dir + f'/{mip_era}_{center}-{model}_{scenario}_{year}{month}{day}{hour}00.grb2'
-
+        
         if os.path.isfile(grbfile) == False:
         	f=open(grbfile,'wb')
+        	#print "file is opened"
+        elif os.path.isfile(grbfile)==True:
+        	f=open(grbfile,'ab+')
         else:
-        	f=open(grbfile,'a+')
+        	print('Uh oh. File not found or opened.')
 
         orig_id = 7 # 7=NWS NCEP
         sub_id = 4 # 4=EMC
@@ -365,6 +385,21 @@ def gcm_to_grib2(var, varname, times, lat, lon):
                 parameter_cat = 1 # 0: temp, 1: moisture, 2: momentum, 3: mass
                 parameter_num = 0 # specific humidity in kg/kg
                 pdtmpl = [parameter_cat, parameter_num, type_gen, 255, 255, 0, 0, 1, 0, fixed_sfc,0,p*100.,255,0,0]
+                discipline = 0 #0:meteorological, 1:hydrological, 2:land surface, 3:space, 10:ocean
+                grib2 = Grib2Encode(discipline,idsect)
+                grib2.addgrid(gdsinfo,gdtmpl)
+                grib2.addfield(pdtnum,pdtmpl,drtnum,drtmpl,var[tindex,i,:,:])
+                grib2.end()
+                f.write(grib2.msg)
+        elif varname == 'T':
+            for i,p in enumerate(newPlevs):
+                pdtnum = 0 #Analysis or forecast at a horizontal level or in a horizontal layer at a point in time.
+                type_gen = 2 #
+                fixed_sfc = 100
+                drtmpl = [1158811648, 0, 1, 10, 0, 0, 255]
+                parameter_cat = 0 # 0: temp, 1: moisture, 2: momentum, 3: mass
+                parameter_num = 0 # temp in K
+                pdtmpl = [parameter_cat, parameter_num, type_gen, 255, 255, 0, 0, 1, 0, fixed_sfc,0,p*100.,255,0,0]       
                 discipline = 0 #0:meteorological, 1:hydrological, 2:land surface, 3:space, 10:ocean
                 grib2 = Grib2Encode(discipline,idsect)
                 grib2.addgrid(gdsinfo,gdtmpl)
@@ -514,8 +549,12 @@ def gcm_to_grib2(var, varname, times, lat, lon):
         # Figure out soil temperature and moisture
 
         f.close()
-        print(f'{varname} GRIB2 Fields Written for {year}')
+        print(f'{varname} GRIB2 Fields Written for  {month} {day} {hour} {year}')
 
 newUonPlevs, newVonPlevs, times, lat, lon = create_U_V_on_P(2008)
+print('Finished U/V variable creation, starting the write to GRIB2.')
 gcm_to_grib2(newUonPlevs, 'U', times, lat, lon)
-
+##orog, landseamask, sst, skin_t, times, lat, lon = create_non_atmos(2008)
+#gcm_to_grib2(orog, 'OROG', times, lat, lon)
+#gcm_to_grib2(sst, 'SST', times, lat, lon)
+#gcm_to_grib2(skin_t, 'TS', times, lat, lon)
