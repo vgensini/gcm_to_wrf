@@ -9,7 +9,7 @@ scenario = 'historical_r1i1p1f1'
 resolution = '_gr2'
 data_dir = f'/home/data/GCM_data/{center}/{model}/{scenario}'
 lev = 'Lmon'
-var = 'mrsos'
+var = 'mrso'
 
 years = np.arange(1990,2015,1)
 
@@ -29,7 +29,6 @@ def slice_gcm(yr):
     df.close()
 
 def slice_gcm_soil(yr):
-    #sub_dset = df.resample(time='6H').interpolate()
     print(yr)
     df = xr.open_mfdataset(f'{data_dir}/{var}_orig_*.nc', combine='by_coords')
     slice_start = f'{yr-1}-12-01'
@@ -45,7 +44,7 @@ def slice_gcm_soil(yr):
     dset.close()
     df.close()
 
-if var == 'tsl' or var == 'mrsos':
+if var == 'tsl' or var == 'mrsos' or var == 'mrso' or var == 'mrsol':
     pool=multiprocessing.Pool(processes=1)
     r2=pool.map(slice_gcm_soil, years)
     pool.close()

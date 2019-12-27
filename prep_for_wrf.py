@@ -38,7 +38,6 @@ gammadry = 9.8/10000.
 gammamoi = 6.5/10000.
 newPlevs = np.arange(1000,24,-25)
 numnewPlevs = len(newPlevs)
-print(newPlevs)
 
 #END CONSTANTS
 
@@ -79,7 +78,7 @@ def create_T_on_P(year):
             pass
     return newTonPlevs, times, lat, lon
 
-def create_RH_Q_Tv_on_P(year, newTonPlevs):
+def create_RH_Q_Z_on_P(year, newTonPlevs):
     #TEMPERATURE FILE
     hus_file = f'{data_dir}/hus_6hrLev_{center}-{model}_{scenario}_{resolution}_{year}010100-{year}123123.nc'
     init_time = datetime.datetime.strptime(f'{year}010100',"%Y%m%d%H")
@@ -113,7 +112,7 @@ def create_RH_Q_Tv_on_P(year, newTonPlevs):
         lonpts = maskedRH[1]
         latpts = maskedRH[2]
         if len(tpts)>0  and len(lonpts) >0 and len(latpts)>0:
-            newQonPlevs[tpts,ind,lonpts,latpts] = newQonPlevs[tpts,ind+1,lonpts,latpts]
+            newQonPlevs[tpts,i,lonpts,latpts] = newQonPlevs[tpts,i+1,lonpts,latpts]
         else:
             pass
     for t in range(numtime):
@@ -129,15 +128,15 @@ def create_RH_Q_Tv_on_P(year, newTonPlevs):
     newWonPlevs = newQonPlevs / (1. - newQonPlevs)
     newTvonPlevs = np.zeros(newWonPlevs.shape)
     for t in range(numtime):
-        for i in range(numlev):
+        for i in range(numnewPlevs):
             newTvonPlevs[t,i,:,:] = newTonPlevs[t,i,:,:] * (1. + 0.608 * newWonPlevs[t,i,:,:])
 
     newZonPlevs = np.zeros(newTvonPlevs.shape)
     for t in range(numtime):
-        for i in range(numlev):
+        for i in range(numnewPlevs):
             if i == 0:
                 avg_Tv = newTvonPlevs[t,i,:,:]
-                newZonPlevs[t,i,:,:] = (((Rd/g)*avg_Tv) * np.log(101325. / (newPlevs[i]))) 
+                newZonPlevs[t,i,:,:] = (((Rd/g)*avg_Tv) * np.log(1013.25 / (newPlevs[i]))) 
             else:
                 avg_Tv = (newTvonPlevs[t,i,:,:] + newTvonPlevs[t,i-1,:,:])*0.5
                 newZonPlevs[t,i,:,:] = (((Rd/g)*avg_Tv) * np.log((newPlevs[i-1])/(newPlevs[i]))) + newZonPlevs[t,i-1,:,:]
@@ -204,81 +203,126 @@ def create_U_V_on_P(year):
             pass
     newUonPlevs = np.ma.array(newUonPlevs,mask=False)
     newVonPlevs = np.ma.array(newVonPlevs,mask=False)
-    return newUonPlevs, newVonPlevs, times, lat, lon
+    return newUonPlevs, newVonPlevs#, times, lat, lon
 
 def create_surface_vars(year):
 	tos_file = f'{data_dir}/tos_6hr_{center}-{model}_{scenario}_{resolution}_{year}010100-{year}123123.nc'
-    ts_file = f'{data_dir}/tslsi_6hr_{center}-{model}_{scenario}_{resolution}_{year}010100-{year}123123.nc'
-    orog_file = f'{data_dir}/orog_fx_{center}-{model}_{scenario}_{resolution}.nc'
-    land_frac_file = f'{data_dir}/sftlf_fx_{center}-{model}_{scenario}_{resolution}.nc'
-    nc_o = Dataset(orog_file,'r')
-    orog = nc_o.variables['orog'][:]
-    nc_o.close()
-    orog = np.ma.array(orog,mask=False)
-    ncland = Dataset(land_frac_file,'r')
-    land_frac = ncland.variables['sftlf'][:]
-    ncland.close()
-    landseamask = np.array(np.greater_equal(land_frac,0.5),dtype=int)
-    nc = Dataset(tos_file,'r')
-    sst = nc.variables['tos'][:]
-    nc.close()
-    nc = Dataset(ts_file,'r')
-    skin_t = nc.variables['tslsi'][:]
-    lat = nc.variables['lat'][:]
-    lon = nc.variables['lon'][:]
-    time = nc.variables['time']
-    times = num2date(time[:],units=time.units,calendar=time.calendar)
-    nc.close()
-    sst = np.ma.array(sst,mask=False)
-    skin_t = np.ma.array(skin_t,mask=False)
-    ps_file = f'{data_dir}/ps_6hrLev_{center}-{model}_{scenario}_{resolution}_{year}010100-{year}123123.nc'
-    tmp2_file = f'{data_dir}/tas_6hrLev_{center}-{model}_{scenario}_{resolution}_{year}010100-{year}123123.nc'
-    qs_file = f'{data_dir}/huss_6hr_{center}-{model}_{scenario}_{resolution}_{year}010100-{year}123123.nc'
-    ua_file = f'{data_dir}/uas_6hr_{center}-{model}_{scenario}_{resolution}_{year}010100-{year}123123.nc'
-    va_file = f'{data_dir}/vas_6hr_{center}-{model}_{scenario}_{resolution}_{year}010100-{year}123123.nc'
-    nc = Dataset(ps_file,'r')
-    nc1 = Dataset(tmp2_file,'r')
-    nc2 = Dataset(qs_file,'r')
-    nc3 = Dataset(ua_file,'r')
-    nc4 = Dataset(va_file,'r')
-    #read in variables
-    ps = nc.variables['ps'][:]
-    t2m = nc1.variables['tas'][:]
-    q2m = nc2.variables['huss'][:]
-    u10 = nc3.variables['uas'][:]
-    v10 = nc4.variables['vas'][:]
-    nc.close()
-    nc1.close()
-    nc2.close()
-    nc3.close()
-    nc4.close()
-    ps = np.ma.array(ps,mask=False) / 100. 
-    t2m = np.ma.array(t2m,mask=False)
-    q2m = np.ma.array(q2m,mask=False)
-    u10 = np.ma.array(u10,mask=False)
-    v10 = np.ma.array(v10,mask=False)
-    pmsl = (ps * ( 1 - (0.0065*orog/(t2m+0.0065*orog)))**-5.257) * 100.
+	ts_file = f'{data_dir}/tslsi_6hr_{center}-{model}_{scenario}_{resolution}_{year}010100-{year}123123.nc'
+	orog_file = f'{data_dir}/orog_fx_{center}-{model}_{scenario}_{resolution}.nc'
+	land_frac_file = f'{data_dir}/sftlf_fx_{center}-{model}_{scenario}_{resolution}.nc'
+	nc_o = Dataset(orog_file,'r')
+	orog = nc_o.variables['orog'][:]
+	nc_o.close()
+	orog = np.ma.array(orog,mask=False)
+	ncland = Dataset(land_frac_file,'r')
+	land_frac = ncland.variables['sftlf'][:]
+	ncland.close()
+	landseamask = np.array(np.greater_equal(land_frac,0.5),dtype=int)
+	nc = Dataset(tos_file,'r')
+	sst = nc.variables['tos'][:] + 273.15
+	nc.close()
+	nc = Dataset(ts_file,'r')
+	skin_t = nc.variables['tslsi'][:]
+	lat = nc.variables['lat'][:]
+	lon = nc.variables['lon'][:]
+	time = nc.variables['time']
+	times = num2date(time[:],units=time.units,calendar=time.calendar)
+	nc.close()
+	sst = np.ma.array(sst,mask=False)
+	skin_t = np.ma.array(skin_t,mask=False)
+	ps_file = f'{data_dir}/ps_6hrLev_{center}-{model}_{scenario}_{resolution}_{year}010100-{year}123123.nc'
+	tmp2_file = f'{data_dir}/tas_6hr_{center}-{model}_{scenario}_{resolution}_{year}010100-{year}123123.nc'
+	qs_file = f'{data_dir}/huss_6hr_{center}-{model}_{scenario}_{resolution}_{year}010100-{year}123123.nc'
+	ua_file = f'{data_dir}/uas_6hr_{center}-{model}_{scenario}_{resolution}_{year}010100-{year}123123.nc'
+	va_file = f'{data_dir}/vas_6hr_{center}-{model}_{scenario}_{resolution}_{year}010100-{year}123123.nc'
+	nc = Dataset(ps_file,'r')
+	nc1 = Dataset(tmp2_file,'r')
+	nc2 = Dataset(qs_file,'r')
+	nc3 = Dataset(ua_file,'r')
+	nc4 = Dataset(va_file,'r')
+	#read in variables
+	ps = nc.variables['ps'][:]
+	t2m = nc1.variables['tas'][:]
+	q2m = nc2.variables['huss'][:]
+	u10 = nc3.variables['uas'][:]
+	v10 = nc4.variables['vas'][:]
+	nc.close()
+	nc1.close()
+	nc2.close()
+	nc3.close()
+	nc4.close()
+	ps = np.ma.array(ps,mask=False)
+	ps_form = np.ma.array(ps,mask=False) / 100. 
+	t2m = np.ma.array(t2m,mask=False)
+	q2m = np.ma.array(q2m,mask=False)
+	u10 = np.ma.array(u10,mask=False)
+	v10 = np.ma.array(v10,mask=False)
+	pmsl = (ps_form * ( 1 - (0.0065*orog/(t2m+0.0065*orog)))**-5.257) * 100.
+	return t2m, q2m, u10, v10, pmsl, ps, orog, landseamask, sst, skin_t#, times, lat, lon
 
-    return t2m, q2m, u10, v10, pmsl, orog, landseamask, sst, skin_t, times, lat, lon
-
-def create_soil_vars(year, g2lat, g2lon):
-	from scipy import interpolate
-    tsl_file = f'{data_dir}/tsl_Lmon_{center}-{model}_{scenario}_{resolution}_{year}010100-{year}123123.nc'
-    mrsos_file = f'{data_dir}/mrsos_Lmon_{center}-{model}_{scenario}_{resolution}_{year}010100-{year}123123.nc'
+def create_soil_vars(year):
+    from scipy import interpolate
+    tsl_file = f'{data_dir}/tsl_6hr_{center}-{model}_{scenario}_{resolution}_{year}010100-{year}123123.nc'
+    mrsol_file = f'{data_dir}/mrsol_6hr_{center}-{model}_{scenario}_{resolution}_{year}010100-{year}123123.nc'
     nc = Dataset(tsl_file,'r')
+    nc1 = Dataset(mrsol_file,'r')
+    depth = nc.variables['depth'][:]
+    ts = nc.variables['tsl'][:]
+    soil_m = nc1.variables['mrsol'][:]
     numtime = len(nc.dimensions['time'])
     numlat = len(nc.dimensions['lat'])
     numlon = len(nc.dimensions['lon'])
-    depth = len(nc.dimensions['depth'])
-    ts = nc.variables['tsl'][:]
-    lat = nc.variables['lat'][:]
-    lon = nc.variables['lon'][:]
-    g2_grid = interpolate.interp2d(lon, lat, ts)
-    ts_g2_grid = g2_grid(g2lon, g2lat)
+    numdepth = len(nc.dimensions['depth'])
+    nc.close()
+    nc1.close()
+    mr2 = np.zeros(soil_m.shape)
+    #landfrac = np.zeros((numtime,numlat,numlon))
+    for i,t in enumerate(range(numtime)):
+        for j, d in enumerate(depth):
+            #landfrac[i,:,:] = land_frac
+            if j > 0:
+                mr2[i,j,:,:] = (soil_m[i,j,:,:]/((d - depth[j-1] )* 1000.))
+                #print(mr2[i,j,:,:].max(),mr2[i,j,:,:].min())
+            else:
+                mr2[i,j,:,:] = (soil_m[i,j,:,:]/(d * 1000.))
 
-    return orog, landseamask, sst, skin_t, times, lat, lon
+    soilm10 = np.zeros((numtime,numlat,numlon)) 
+    soilm40 = np.zeros((numtime,numlat,numlon))
+    soilm100 = np.zeros((numtime,numlat,numlon))
+    soilm200 = np.zeros((numtime,numlat,numlon))
+    soilt10 = np.zeros((numtime,numlat,numlon))
+    soilt40 = np.zeros((numtime,numlat,numlon))
+    soilt100 = np.zeros((numtime,numlat,numlon))
+    soilt200 = np.zeros((numtime,numlat,numlon))
 
-def gcm_to_grib2(var, varname, times, lat, lon):
+    soilt10 = (ts[:,0,:,:]+ ts[:,1,:,:] + ts[:,2,:,:] + ts[:,3,:,:])/4
+    soilt40 = (ts[:,3,:,:] + ts[:,4,:,:]  + ts[:,5,:,:] + ts[:,6,:,:] + ts[:,7,:,:])/5.
+    soilt100 = (ts[:,7,:,:] + ts[:,8,:,:] + ts[:,9,:,:] +  ts[:,10,:,:])/4.
+    soilt200 = ts[:,12,:,:]
+
+    for lvl in (range(0,4,1)): #depth[0:4]):
+        if lvl == 0:
+            soilm10 = soilm10 + (depth[lvl]) * mr2[:,lvl,:,:]/0.1
+        else:
+            soilm10 = soilm10 + np.absolute(min(0.1,depth[lvl+1]) - depth[lvl]) * mr2[:,lvl,:,:]/0.1
+
+    for lvl in (range(3,8,1)): #(depth[3:8]):
+        soilm40 = soilm40 + (min(0.4,depth[lvl+1]) - max(0.1,depth[lvl])) * mr2[:,lvl,:,:]/0.3
+
+    for lvl in (range(7,11,1)): #(depth[7:11]):
+        soilm100 = soilm100 + (min(1.,depth[lvl+1]) - max(0.4,depth[lvl])) * mr2[:,lvl,:,:]/.6
+
+    for lvl in (range(10,14,1)): #(depth[10:14]):
+        soilm200 = soilm200 + (min(2.,depth[lvl+1]) - max(1.,depth[lvl])) * mr2[:,lvl,:,:]/1.
+
+    soilm10[np.where(soilm10<0.)] = 0.
+    soilm40[np.where(soilm40<0.)] = 0.
+    soilm100[np.where(soilm100<0.)] = 0.
+    soilm200[np.where(soilm200<0.)] = 0.
+
+    return soilt10, soilt40, soilt100, soilt200, soilm10, soilm40, soilm100, soilm200
+
+def gcm_to_grib2(var, varname, times, lat, lon, table_flag=0):
     numlat = len(lat)
     numlon = len(lon)
     for tindex,dat in enumerate(times):
@@ -305,7 +349,7 @@ def gcm_to_grib2(var, varname, times, lat, lon):
         orig_id = 7 # 7=NWS NCEP
         sub_id = 4 # 4=EMC
         grb_master_table = 11 #use newest version. 
-        grb_local_table = 0 #local tables not used
+        grb_local_table = table_flag
         sig_ref_time = 2 #verifying time of forecast
         ref_year = '%s'%year
         ref_month = '%s'%month
@@ -560,6 +604,157 @@ def gcm_to_grib2(var, varname, times, lat, lon):
             grib2.addfield(pdtnum,pdtmpl,drtnum,drtmpl,var[tindex,:, :])
             grib2.end()
             f.write(grib2.msg)
+        elif varname == 'PS':
+            pdtnum = 0 #Analysis or forecast at a horizontal level or in a horizontal layer at a point in time.
+            type_gen = 2 #
+            fixed_sfc = 1 # ground surface
+            scale_factor = 0 #scale factor
+            height = 0
+            drtmpl = [1224376704, 4, 1, 16, 0, 0, 255]
+            parameter_cat = 3 # 0: temp, 1: moisture, 2: momentum, 3: mass
+            parameter_num = 0 # pressure
+            pdtmpl = [parameter_cat, parameter_num, type_gen, 255, 255, 0, 0, 1, 0, fixed_sfc,0,scale_factor,255,0,0]       
+            grib2 = Grib2Encode(0,idsect)
+            grib2.addgrid(gdsinfo,gdtmpl)
+            grib2.addfield(pdtnum,pdtmpl,drtnum,drtmpl,var[tindex,:,:])
+            grib2.end()
+            f.write(grib2.msg)
+        elif varname == 'ST10':
+            pdtnum = 0 #Analysis or forecast at a horizontal level or in a horizontal layer at a point in time.
+            type_gen = 2 #
+            height1 = 0
+            height2 = 10
+            fixed_sfc = 106 # 106: depth below land surface
+            scale_factor = 2 #scale factor
+            drtmpl = [1158152192, 0, 1, 10, 0, 0, 255]
+            discipline = 0 #2 #0:meteorological, 1:hydrological, 2:land surface, 3:space, 10:ocean
+            parameter_cat = 0 # 3 #0 # 
+            parameter_num = 0 #2 # temp in K
+            pdtmpl = [parameter_cat, parameter_num, type_gen, 255, 255, 0, 0, 1, 0, fixed_sfc,scale_factor,height1,fixed_sfc,scale_factor,height2]
+            grib2 = Grib2Encode(discipline,idsect)
+            grib2.addgrid(gdsinfo,gdtmpl)
+            grib2.addfield(pdtnum,pdtmpl,drtnum,drtmpl,var[tindex,:,:])
+            grib2.end()
+            f.write(grib2.msg)
+        elif varname == 'ST40':
+            pdtnum = 0 #Analysis or forecast at a horizontal level or in a horizontal layer at a point in time.
+            type_gen = 2 #
+            height1 = 10
+            height2 = 40
+            fixed_sfc = 106 # 106: depth below land surface
+            scale_factor = 2 #scale factor
+            drtmpl = [1158152192, 0, 1, 10, 0, 0, 255]
+            discipline = 0 #2 #0:meteorological, 1:hydrological, 2:land surface, 3:space, 10:ocean
+            parameter_cat = 0 # 3 #0 # 
+            parameter_num = 0 #2 # temp in K
+            pdtmpl = [parameter_cat, parameter_num, type_gen, 255, 255, 0, 0, 1, 0, fixed_sfc,scale_factor,height1,fixed_sfc,scale_factor,height2]
+            grib2 = Grib2Encode(discipline,idsect)
+            grib2.addgrid(gdsinfo,gdtmpl)
+            grib2.addfield(pdtnum,pdtmpl,drtnum,drtmpl,var[tindex,:,:])
+            grib2.end()
+            f.write(grib2.msg)
+        elif varname == 'ST100':
+            pdtnum = 0 #Analysis or forecast at a horizontal level or in a horizontal layer at a point in time.
+            type_gen = 2 #
+            height1 = 40
+            height2 = 100
+            fixed_sfc = 106 # 106: depth below land surface
+            scale_factor = 2 #scale factor
+            drtmpl = [1158152192, 0, 1, 10, 0, 0, 255]
+            discipline = 0 #2 #0:meteorological, 1:hydrological, 2:land surface, 3:space, 10:ocean
+            parameter_cat = 0 # 3 #0 # 
+            parameter_num = 0 #2 # temp in K
+            pdtmpl = [parameter_cat, parameter_num, type_gen, 255, 255, 0, 0, 1, 0, fixed_sfc,scale_factor,height1,fixed_sfc,scale_factor,height2]
+            grib2 = Grib2Encode(discipline,idsect)
+            grib2.addgrid(gdsinfo,gdtmpl)
+            grib2.addfield(pdtnum,pdtmpl,drtnum,drtmpl,var[tindex,:,:])
+            grib2.end()
+            f.write(grib2.msg)
+        elif varname == 'ST200':
+            pdtnum = 0 #Analysis or forecast at a horizontal level or in a horizontal layer at a point in time.
+            type_gen = 2 #
+            height1 = 100
+            height2 = 200
+            fixed_sfc = 106 # 106: depth below land surface
+            scale_factor = 2 #scale factor
+            drtmpl = [1158152192, 0, 1, 10, 0, 0, 255]
+            discipline = 0 #2 #0:meteorological, 1:hydrological, 2:land surface, 3:space, 10:ocean
+            parameter_cat = 0 # 3 #0 # 
+            parameter_num = 0 #2 # temp in K
+            pdtmpl = [parameter_cat, parameter_num, type_gen, 255, 255, 0, 0, 1, 0, fixed_sfc,scale_factor,height1,fixed_sfc,scale_factor,height2]
+            grib2 = Grib2Encode(discipline,idsect)
+            grib2.addgrid(gdsinfo,gdtmpl)
+            grib2.addfield(pdtnum,pdtmpl,drtnum,drtmpl,var[tindex,:,:])
+            grib2.end()
+            f.write(grib2.msg)
+        elif varname == 'SM10':
+            pdtnum = 0 #Analysis or forecast at a horizontal level or in a horizontal layer at a point in time.
+            type_gen = 2 #
+            height1 = 0
+            height2 = 10
+            fixed_sfc = 106 # 106: depth below land surface
+            scale_factor = 2 #scale factor
+            drtmpl = [1107820544, 0, 3, 10, 0, 0, 255]
+            discipline = 2 #0:meteorological, 1:hydrological, 2:land surface, 3:space, 10:ocean
+            parameter_cat = 0 # soil products 
+            parameter_num = 192 # Volumetric soil moisture content fraction
+            pdtmpl = [parameter_cat, parameter_num, type_gen, 255, 255, 0, 0, 1, 0, fixed_sfc,scale_factor,height1,fixed_sfc,scale_factor,height2]
+            grib2 = Grib2Encode(discipline,idsect)
+            grib2.addgrid(gdsinfo,gdtmpl)
+            grib2.addfield(pdtnum,pdtmpl,drtnum,drtmpl,var[tindex,:,:])
+            grib2.end()
+            f.write(grib2.msg)
+        elif varname == 'SM40':
+            pdtnum = 0 #Analysis or forecast at a horizontal level or in a horizontal layer at a point in time.
+            type_gen = 2 #
+            height1 = 10
+            height2 = 40
+            fixed_sfc = 106 # 106: depth below land surface
+            scale_factor = 2 #scale factor
+            drtmpl = [1107820544, 0, 3, 10, 0, 0, 255]
+            discipline = 2 #0:meteorological, 1:hydrological, 2:land surface, 3:space, 10:ocean
+            parameter_cat = 0 # soil products 
+            parameter_num = 192 # Volumetric soil moisture content fraction
+            pdtmpl = [parameter_cat, parameter_num, type_gen, 255, 255, 0, 0, 1, 0, fixed_sfc,scale_factor,height1,fixed_sfc,scale_factor,height2]
+            grib2 = Grib2Encode(discipline,idsect)
+            grib2.addgrid(gdsinfo,gdtmpl)
+            grib2.addfield(pdtnum,pdtmpl,drtnum,drtmpl,var[tindex,:,:])
+            grib2.end()
+            f.write(grib2.msg)
+        elif varname == 'SM100':
+            pdtnum = 0 #Analysis or forecast at a horizontal level or in a horizontal layer at a point in time.
+            type_gen = 2 #
+            height1 = 40
+            height2 = 100
+            fixed_sfc = 106 # 106: depth below land surface
+            scale_factor = 2 #scale factor
+            drtmpl = [1107820544, 0, 3, 10, 0, 0, 255]
+            discipline = 2 #0:meteorological, 1:hydrological, 2:land surface, 3:space, 10:ocean
+            parameter_cat = 0 # soil products 
+            parameter_num = 192 # Volumetric soil moisture content fraction
+            pdtmpl = [parameter_cat, parameter_num, type_gen, 255, 255, 0, 0, 1, 0, fixed_sfc,scale_factor,height1,fixed_sfc,scale_factor,height2]
+            grib2 = Grib2Encode(discipline,idsect)
+            grib2.addgrid(gdsinfo,gdtmpl)
+            grib2.addfield(pdtnum,pdtmpl,drtnum,drtmpl,var[tindex,:,:])
+            grib2.end()
+            f.write(grib2.msg)
+        elif varname == 'SM200':
+            pdtnum = 0 #Analysis or forecast at a horizontal level or in a horizontal layer at a point in time.
+            type_gen = 2 #
+            height1 = 100
+            height2 = 200
+            fixed_sfc = 106 # 106: depth below land surface
+            scale_factor = 2 #scale factor
+            drtmpl = [1107820544, 0, 3, 10, 0, 0, 255]
+            discipline = 2 #0:meteorological, 1:hydrological, 2:land surface, 3:space, 10:ocean
+            parameter_cat = 0 # soil products 
+            parameter_num = 192 # Volumetric soil moisture content fraction
+            pdtmpl = [parameter_cat, parameter_num, type_gen, 255, 255, 0, 0, 1, 0, fixed_sfc,scale_factor,height1,fixed_sfc,scale_factor,height2]
+            grib2 = Grib2Encode(discipline,idsect)
+            grib2.addgrid(gdsinfo,gdtmpl)
+            grib2.addfield(pdtnum,pdtmpl,drtnum,drtmpl,var[tindex,:,:])
+            grib2.end()
+            f.write(grib2.msg)
 
         # Figure out soil temperature and moisture
 
@@ -567,15 +762,51 @@ def gcm_to_grib2(var, varname, times, lat, lon):
         print(f'{varname} GRIB2 Fields Written for  {month} {day} {hour} {year}')
 
 
+###############################################################################
+#Run functions to get the GCM netCDF vars on pressure levels needed to run WRF#
+###############################################################################
+newTonPlevs, times, lat, lon = create_T_on_P(year)
+newRHonPlevs, newQonPlevs, newTvonPlevs, newZonPlevs = create_RH_Q_Z_on_P(year, newTonPlevs)
+newUonPlevs, newVonPlevs = create_U_V_on_P(year)
+t2m, q2m, u10, v10, pmsl, ps, orog, landseamask, sst, skin_t = create_surface_vars(year)
+soilt10, soilt40, soilt100, soilt200, soilm10, soilm40, soilm100, soilm200 = create_soil_vars(year)
 
+####################################################################################################################
+###############   Write out variables needed to run WRF as grib2 for passing to ungrib.exe   #######################
+#https://www2.mmm.ucar.edu/wrf/users/docs/user_guide_v4/v4.1/users_guide_chap3.html#_Required_Meteorological_Fields#
+####################################################################################################################
 
-
-
-
-newUonPlevs, newVonPlevs, times, lat, lon = create_U_V_on_P(2008)
-print('Finished U/V variable creation, starting the write to GRIB2.')
+#3-D
+gcm_to_grib2(newTonPlevs, 'T', times, lat, lon)
+gcm_to_grib2(newRHonPlevs, 'RH', times, lat, lon)
+gcm_to_grib2(newQonPlevs, 'Q', times, lat, lon)
 gcm_to_grib2(newUonPlevs, 'U', times, lat, lon)
-##orog, landseamask, sst, skin_t, times, lat, lon = create_non_atmos(2008)
-#gcm_to_grib2(orog, 'OROG', times, lat, lon)
-#gcm_to_grib2(sst, 'SST', times, lat, lon)
-#gcm_to_grib2(skin_t, 'TS', times, lat, lon)
+gcm_to_grib2(newVonPlevs, 'V', times, lat, lon)
+gcm_to_grib2(newZonPlevs, 'Z', times, lat, lon)
+
+#Surface
+gcm_to_grib2(pmsl, 'PSL', times, lat, lon)
+gcm_to_grib2(ps, 'PS', times, lat, lon)
+gcm_to_grib2(skin_t, 'TS', times, lat, lon)
+gcm_to_grib2(sst, 'SST', times, lat, lon)
+gcm_to_grib2(t2m, 'T2', times, lat, lon)
+gcm_to_grib2(q2m, 'Q2', times, lat, lon)
+gcm_to_grib2(u10, 'U10', times, lat, lon)
+gcm_to_grib2(v10, 'V10', times, lat, lon)
+
+#Static
+gcm_to_grib2(orog, 'OROG', times, lat, lon)
+gcm_to_grib2(landseamask, 'LANDSEA', times, lat, lon)
+
+#Soil
+gcm_to_grib2(soilt10, 'ST10', times, lat, lon, 1)
+gcm_to_grib2(soilt40, 'ST40', times, lat, lon, 1)
+gcm_to_grib2(soilt100, 'ST100', times, lat, lon, 1)
+gcm_to_grib2(soilt200, 'ST200', times, lat, lon, 1)
+gcm_to_grib2(soilm10, 'SM10', times, lat, lon, 1)
+gcm_to_grib2(soilm40, 'SM40', times, lat, lon, 1)
+gcm_to_grib2(soilm100, 'SM100', times, lat, lon, 1)
+gcm_to_grib2(soilm200, 'SM200', times, lat, lon, 1)
+
+print(f'All done writing the Grib2 files for {year}!')
+#END
